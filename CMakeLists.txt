@@ -5,8 +5,11 @@ project(zlib C)
 
 set(VERSION "1.2.8")
 
-option(ASM686 "Enable building i686 assembly implementation")
-option(AMD64 "Enable building amd64 assembly implementation")
+option(ZLIB_BUILD_ASM686 "Enable building i686 assembly implementation")
+option(ZLIB_BUILD_AMD64 "Enable building amd64 assembly implementation")
+option(ZLIB_BUILD_EXAMPLES "Enable building zlib examples" OFF)
+option(ZLIB_BUILD_STATIC_LIBS "Enable building zlib static libraries" OFF)
+option(ZLIB_BUILD_SHARED_LIBS "Enable building zlib shared libraries" ON)
 
 set(INSTALL_BIN_DIR "${CMAKE_INSTALL_PREFIX}/bin" CACHE PATH "Installation directory for executables")
 set(INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib" CACHE PATH "Installation directory for libraries")
@@ -130,9 +133,9 @@ if(NOT MINGW)
 endif()
 
 if(CMAKE_COMPILER_IS_GNUCC)
-    if(ASM686)
+    if(ZLIB_BUILD_ASM686)
         set(ZLIB_ASMS contrib/asm686/match.S)
-    elseif (AMD64)
+    elseif (ZLIB_BUILD_AMD64)
         set(ZLIB_ASMS contrib/amd64/amd64-match.S)
     endif ()
 
@@ -143,13 +146,13 @@ if(CMAKE_COMPILER_IS_GNUCC)
 endif()
 
 if(MSVC)
-    if(ASM686)
+    if(ZLIB_BUILD_ASM686)
 		ENABLE_LANGUAGE(ASM_MASM)
         set(ZLIB_ASMS
 			contrib/masmx86/inffas32.asm
 			contrib/masmx86/match686.asm
 		)
-    elseif (AMD64)
+    elseif (ZLIB_BUILD_AMD64)
 		ENABLE_LANGUAGE(ASM_MASM)
         set(ZLIB_ASMS
 			contrib/masmx64/gvmat64.asm
@@ -183,38 +186,55 @@ if(MINGW)
     set(ZLIB_DLL_SRCS ${CMAKE_CURRENT_BINARY_DIR}/zlib1rc.obj)
 endif(MINGW)
 
-add_library(zlib SHARED ${ZLIB_SRCS} ${ZLIB_ASMS} ${ZLIB_DLL_SRCS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
-add_library(zlibstatic STATIC ${ZLIB_SRCS} ${ZLIB_ASMS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
-set_target_properties(zlib PROPERTIES DEFINE_SYMBOL ZLIB_DLL)
-set_target_properties(zlib PROPERTIES SOVERSION 1)
+if(ZLIB_BUILD_SHARED_LIBS)
+  add_library(zlib SHARED ${ZLIB_SRCS} ${ZLIB_ASMS} ${ZLIB_DLL_SRCS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
+  set_target_properties(zlib PROPERTIES DEFINE_SYMBOL ZLIB_DLL)
+  set_target_properties(zlib PROPERTIES SOVERSION 1)
 
-if(NOT CYGWIN)
-    # This property causes shared libraries on Linux to have the full version
-    # encoded into their final filename.  We disable this on Cygwin because
-    # it causes cygz-${ZLIB_FULL_VERSION}.dll to be created when cygz.dll
-    # seems to be the default.
-    #
-    # This has no effect with MSVC, on that platform the version info for
-    # the DLL comes from the resource file win32/zlib1.rc
-    set_target_properties(zlib PROPERTIES VERSION ${ZLIB_FULL_VERSION})
+  if(NOT CYGWIN)
+      # This property causes shared libraries on Linux to have the full version
+      # encoded into their final filename.  We disable this on Cygwin because
+      # it causes cygz-${ZLIB_FULL_VERSION}.dll to be created when cygz.dll
+      # seems to be the default.
+      #
+      # This has no effect with MSVC, on that platform the version info for
+      # the DLL comes from the resource file win32/zlib1.rc
+      set_target_properties(zlib PROPERTIES VERSION ${ZLIB_FULL_VERSION})
+  endif()
+endif()
+
+if(ZLIB_BUILD_STATIC_LIBS)
+  add_library(zlibstatic STATIC ${ZLIB_SRCS} ${ZLIB_ASMS} ${ZLIB_PUBLIC_HDRS} ${ZLIB_PRIVATE_HDRS})
 endif()
 
 if(UNIX)
     # On unix-like platforms the library is almost always called libz
-   set_target_properties(zlib zlibstatic PROPERTIES OUTPUT_NAME z)
-   if(NOT APPLE)
-     set_target_properties(zlib PROPERTIES LINK_FLAGS "-Wl,--version-script,\"${CMAKE_CURRENT_SOURCE_DIR}/zlib.map\"")
-   endif()
-elseif(BUILD_SHARED_LIBS AND WIN32)
-    # Creates zlib1.dll when building shared library version
-    set_target_properties(zlib PROPERTIES SUFFIX "1.dll")
+    if(ZLIB_BUILD_SHARED_LIBS)
+      set_target_properties(zlib PROPERTIES OUTPUT_NAME z)
+      if(NOT APPLE)
+        set_target_properties(zlib PROPERTIES LINK_FLAGS "-Wl,--version-script,\"${CMAKE_CURRENT_SOURCE_DIR}/zlib.map\"")
+      endif()
+    endif()
+    if(ZLIB_BUILD_STATIC_LIBS)
+      set_target_properties(zlibstatic PROPERTIES OUTPUT_NAME z)
+    endif()
+elseif(WIN32)
+    if(ZLIB_BUILD_SHARED_LIBS)
+      # Creates zlib1.dll when building shared library version
+      set_target_properties(zlib PROPERTIES SUFFIX "1.dll")
+    endif()
 endif()
 
 if(NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL )
-    install(TARGETS zlib zlibstatic
-        RUNTIME DESTINATION "${INSTALL_BIN_DIR}"
-        ARCHIVE DESTINATION "${INSTALL_LIB_DIR}"
-        LIBRARY DESTINATION "${INSTALL_LIB_DIR}" )
+    if(ZLIB_BUILD_SHARED_LIBS)
+      install(TARGETS zlib
+          RUNTIME DESTINATION "${INSTALL_BIN_DIR}"
+          LIBRARY DESTINATION "${INSTALL_LIB_DIR}" )
+    endif()
+    if(ZLIB_BUILD_STATIC_LIBS)
+      install(TARGETS zlibstatic
+          ARCHIVE DESTINATION "${INSTALL_LIB_DIR}")
+    endif()
 endif()
 if(NOT SKIP_INSTALL_HEADERS AND NOT SKIP_INSTALL_ALL )
     install(FILES ${ZLIB_PUBLIC_HDRS} DESTINATION "${INSTALL_INC_DIR}")
@@ -230,6 +250,7 @@ endif()
 # Example binaries
 #============================================================================
 
+if(ZLIB_BUILD_EXAMPLES)
 add_executable(example test/example.c)
 target_link_libraries(example zlib)
 add_test(example example)
@@ -246,4 +267,5 @@ if(HAVE_OFF64_T)
     add_executable(minigzip64 test/minigzip.c)
     target_link_libraries(minigzip64 zlib)
     set_target_properties(minigzip64 PROPERTIES COMPILE_FLAGS "-D_FILE_OFFSET_BITS=64")
+endif()
 endif()
