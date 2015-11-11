@@ -21,5 +21,14 @@
 /minigzip64
 /minigzipsh
 /zlib.pc
-
 .DS_Store
+*.filters
+*.vcxproj
+*.dir
+*.sln
+Release
+Debug
+x64
+*.cmake
+CMakeFiles
+zconf.h
